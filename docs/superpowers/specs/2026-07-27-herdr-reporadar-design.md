@@ -33,7 +33,8 @@ but cannot expand into an empty section.
 Keyboard controls are `j`/Down and `k`/Up for navigation, Enter/Space for
 expand or collapse, `r` for immediate refresh, and `q`/Escape for closing the
 pane. Mouse clicks select and toggle repository rows; the wheel scrolls the
-list. A short footer exposes only the essential key hints.
+list. The footer reports repository totals without filling the compact pane
+with usage instructions.
 
 ## Architecture
 
@@ -60,10 +61,10 @@ existing RepoRadar pane instead of creating duplicates in the same workspace.
 
 Repository discovery walks directories without following symbolic links. A
 directory is a repository when it contains a `.git` directory or `.git` file.
-The walker never descends into `.git` internals and honors ignore files to avoid
-scanning generated trees such as `node_modules` and `target`. The workspace
-root itself is included when it is a repository, and nested repositories remain
-independent entries.
+The walker never descends into `.git` internals or common generated trees such
+as `node_modules` and `target`. Parent ignore files do not hide independent
+repositories from the workspace radar. The workspace root itself is included
+when it is a repository, and nested repositories remain independent entries.
 
 For each discovered repository, a bounded worker pool executes a read-only
 porcelain status command. The result contains the branch, changed file paths,
@@ -114,4 +115,3 @@ The delivery is accepted when:
   repositories highlighted with correct counts;
 - clicking or activating a dirty repository reveals its changed files;
 - changing a fixture repository appears without restarting the pane.
-

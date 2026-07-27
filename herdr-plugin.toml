@@ -1,0 +1,22 @@
+id = "herdr-reporadar"
+name = "RepoRadar"
+version = "0.1.0"
+min_herdr_version = "0.7.0"
+description = "A right-side change radar for multi-repository Herdr workspaces."
+platforms = ["linux", "macos"]
+
+[[build]]
+command = ["cargo", "build", "--release", "--locked"]
+
+[[panes]]
+id = "radar"
+title = "RepoRadar"
+placement = "split"
+command = ["./target/release/herdr-reporadar"]
+
+[[actions]]
+id = "open"
+title = "Open RepoRadar"
+description = "Open or focus the repository change radar on the right."
+contexts = ["workspace"]
+command = ["bash", "scripts/open.sh"]
