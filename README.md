@@ -14,12 +14,15 @@ Herdr clones the tagged source and builds it locally. This requires Git and
 Rust 1.88 or newer.
 
 ```bash
-herdr plugin install yuebanhome/herdr-workspace --ref v0.1.1 -y
+herdr plugin install yuebanhome/herdr-workspace --ref v0.1.2 -y
 herdr plugin action invoke herdr-reporadar.open
 ```
 
-The action opens one narrow pane on the right of the current workspace. Invoke
-it again to focus the existing pane.
+The one-time action initializes the current workspace immediately when Herdr is
+already running. After that, RepoRadar opens automatically for every workspace
+and follows the active tab without taking focus. Herdr also restores missing
+sidebars on server startup and on the next workspace or tab focus. The manual
+action remains available to move RepoRadar into the current tab and focus it.
 
 ## Install A Prebuilt Bundle
 
@@ -34,7 +37,7 @@ Prebuilt releases do not require Rust. Published targets are:
 With GitHub CLI on Apple Silicon macOS:
 
 ```bash
-release_version=v0.1.1
+release_version=v0.1.2
 release_target=aarch64-apple-darwin
 install_root="${XDG_DATA_HOME:-$HOME/.local/share}/herdr/plugins/reporadar-$release_version"
 mkdir -p "$install_root"
@@ -57,7 +60,7 @@ both files in one directory and set `archive` to the downloaded archive name.
 On macOS, verify it with:
 
 ```bash
-archive=herdr-reporadar-v0.1.1-aarch64-apple-darwin.tar.gz
+archive=herdr-reporadar-v0.1.2-aarch64-apple-darwin.tar.gz
 grep -F "$archive" SHA256SUMS | shasum -a 256 -c -
 ```
 
@@ -66,8 +69,9 @@ extract the archive and link the extracted `herdr-reporadar` directory as
 shown above.
 
 To upgrade, close the running RepoRadar pane with `q`, download the new version
-to a new persistent directory, and link that directory. To return to a local
-development checkout:
+to a new persistent directory, and link that directory. Run the `open` action
+once to initialize the current workspace immediately; later workspace and tab
+focus events are automatic. To return to a local development checkout:
 
 ```bash
 cargo build --release --locked
@@ -76,7 +80,7 @@ herdr plugin link "$PWD" --enabled
 
 ## Development
 
-Requirements: Rust 1.88 or newer, Git, and Herdr 0.7 or newer.
+Requirements: Rust 1.88 or newer, Git, and Herdr 0.7.5 or newer.
 
 ```bash
 cargo build --release
@@ -115,8 +119,8 @@ Keep the versions in `Cargo.toml` and `herdr-plugin.toml` identical, then tag
 the release commit. The tag must be exactly `v` followed by that version.
 
 ```bash
-git tag -a v0.1.1 -m "RepoRadar v0.1.1"
-git push origin v0.1.1
+git tag -a v0.1.2 -m "RepoRadar v0.1.2"
+git push origin v0.1.2
 ```
 
 The Release workflow validates the tag, runs the quality gate, builds all three

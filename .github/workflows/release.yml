@@ -51,7 +51,7 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --all-targets --locked -- -D warnings
       - run: cargo test --all-targets --locked
-      - run: bash -n scripts/open.sh scripts/package-release.sh tests/release_package.sh
+      - run: bash -n scripts/open.sh scripts/auto-open.sh scripts/reconcile.sh scripts/package-release.sh tests/release_package.sh
       - run: bash tests/release_package.sh
 
   build:
@@ -123,6 +123,8 @@ jobs:
             '```bash' \
             "herdr plugin install yuebanhome/herdr-workspace --ref $RELEASE_TAG -y" \
             '```' \
+            '' \
+            'RepoRadar automatically opens once per workspace and follows the active tab without taking focus. Invoke the open action once after installing into an already-running Herdr server to initialize the current workspace immediately.' \
             '' \
             'Prebuilt bundles and SHA-256 checksums are attached below. Extract the matching bundle and run `herdr plugin link <bundle>/herdr-reporadar --enabled`.' \
             > release-notes.md

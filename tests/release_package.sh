@@ -29,3 +29,5 @@ cmp "$fake_binary" "$bundle/target/release/herdr-reporadar"
 [[ -f "$bundle/Cargo.lock" ]]
 [[ -f "$bundle/src/main.rs" ]]
 [[ -x "$bundle/scripts/open.sh" ]]
+[[ -x "$bundle/scripts/auto-open.sh" ]]
+[[ -x "$bundle/scripts/reconcile.sh" ]]

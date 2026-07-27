@@ -39,6 +39,8 @@ cp "$repo_root/README.md" "$bundle/README.md"
 cp "$repo_root/herdr-plugin.toml" "$bundle/herdr-plugin.toml"
 cp -R "$repo_root/src" "$bundle/src"
 install -m 0755 "$repo_root/scripts/open.sh" "$bundle/scripts/open.sh"
+install -m 0755 "$repo_root/scripts/auto-open.sh" "$bundle/scripts/auto-open.sh"
+install -m 0755 "$repo_root/scripts/reconcile.sh" "$bundle/scripts/reconcile.sh"
 install -m 0755 "$binary" "$bundle/target/release/herdr-reporadar"
 
 archive="$output_dir/herdr-reporadar-v${version}-${target}.tar.gz"

@@ -1,12 +1,27 @@
 id = "herdr-reporadar"
 name = "RepoRadar"
-version = "0.1.1"
-min_herdr_version = "0.7.0"
+version = "0.1.2"
+min_herdr_version = "0.7.5"
 description = "A right-side change radar for multi-repository Herdr workspaces."
 platforms = ["linux", "macos"]
 
 [[build]]
 command = ["cargo", "build", "--release", "--locked"]
+
+[[startup]]
+command = ["bash", "scripts/auto-open.sh"]
+
+[[events]]
+on = "workspace.created"
+command = ["bash", "scripts/auto-open.sh"]
+
+[[events]]
+on = "workspace.focused"
+command = ["bash", "scripts/auto-open.sh"]
+
+[[events]]
+on = "tab.focused"
+command = ["bash", "scripts/auto-open.sh"]
 
 [[panes]]
 id = "radar"
@@ -17,6 +32,6 @@ command = ["./target/release/herdr-reporadar"]
 [[actions]]
 id = "open"
 title = "Open RepoRadar"
-description = "Open or focus the repository change radar on the right."
+description = "Move the repository change radar to this tab and focus it."
 contexts = ["workspace"]
 command = ["bash", "scripts/open.sh"]
