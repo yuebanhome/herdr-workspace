@@ -53,9 +53,17 @@ herdr plugin action invoke herdr-reporadar.open
 
 Without GitHub CLI, download the target archive and `SHA256SUMS` from the
 [GitHub Release](https://github.com/yuebanhome/herdr-workspace/releases). Put
-both files in one directory, verify with `shasum -a 256 -c -` on macOS or
-`sha256sum -c -` on Linux, extract the archive, and link the extracted
-`herdr-reporadar` directory as shown above.
+both files in one directory and set `archive` to the downloaded archive name.
+On macOS, verify it with:
+
+```bash
+archive=herdr-reporadar-v0.1.1-aarch64-apple-darwin.tar.gz
+grep -F "$archive" SHA256SUMS | shasum -a 256 -c -
+```
+
+On Linux, use `grep -F "$archive" SHA256SUMS | sha256sum -c -` instead. Then
+extract the archive and link the extracted `herdr-reporadar` directory as
+shown above.
 
 To upgrade, close the running RepoRadar pane with `q`, download the new version
 to a new persistent directory, and link that directory. To return to a local
