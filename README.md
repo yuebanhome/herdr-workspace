@@ -8,15 +8,63 @@ keeps clean repositories visible but muted, highlights repositories with local
 changes, and expands dirty repositories to show their changed files. It does
 not browse, diff, edit, stage, or commit code.
 
-## Install
+## Install From Source
+
+Herdr clones the tagged source and builds it locally. This requires Git and
+Rust 1.88 or newer.
 
 ```bash
-herdr plugin install yuebanhome/herdr-workspace
+herdr plugin install yuebanhome/herdr-workspace --ref v0.1.1 -y
 herdr plugin action invoke herdr-reporadar.open
 ```
 
 The action opens one narrow pane on the right of the current workspace. Invoke
 it again to focus the existing pane.
+
+## Install A Prebuilt Bundle
+
+Prebuilt releases do not require Rust. Published targets are:
+
+| System | Target |
+| --- | --- |
+| Linux x86_64 | `x86_64-unknown-linux-gnu` |
+| Linux ARM64 | `aarch64-unknown-linux-gnu` |
+| macOS Apple Silicon | `aarch64-apple-darwin` |
+
+With GitHub CLI on Apple Silicon macOS:
+
+```bash
+release_version=v0.1.1
+release_target=aarch64-apple-darwin
+install_root="${XDG_DATA_HOME:-$HOME/.local/share}/herdr/plugins/reporadar-$release_version"
+mkdir -p "$install_root"
+gh release download "$release_version" \
+  --repo yuebanhome/herdr-workspace \
+  --pattern "herdr-reporadar-$release_version-$release_target.tar.gz" \
+  --pattern SHA256SUMS \
+  --dir "$install_root"
+cd "$install_root"
+grep "herdr-reporadar-$release_version-$release_target.tar.gz" SHA256SUMS \
+  | shasum -a 256 -c -
+tar -xzf "herdr-reporadar-$release_version-$release_target.tar.gz"
+herdr plugin link "$install_root/herdr-reporadar" --enabled
+herdr plugin action invoke herdr-reporadar.open
+```
+
+Without GitHub CLI, download the target archive and `SHA256SUMS` from the
+[GitHub Release](https://github.com/yuebanhome/herdr-workspace/releases). Put
+both files in one directory, verify with `shasum -a 256 -c -` on macOS or
+`sha256sum -c -` on Linux, extract the archive, and link the extracted
+`herdr-reporadar` directory as shown above.
+
+To upgrade, close the running RepoRadar pane with `q`, download the new version
+to a new persistent directory, and link that directory. To return to a local
+development checkout:
+
+```bash
+cargo build --release --locked
+herdr plugin link "$PWD" --enabled
+```
 
 ## Development
 
@@ -50,7 +98,22 @@ description = "Open RepoRadar"
 cargo fmt --all -- --check
 cargo clippy --all-targets --locked -- -D warnings
 cargo test --all-targets --locked
+bash tests/release_package.sh
 ```
+
+## Publishing
+
+Keep the versions in `Cargo.toml` and `herdr-plugin.toml` identical, then tag
+the release commit. The tag must be exactly `v` followed by that version.
+
+```bash
+git tag -a v0.1.1 -m "RepoRadar v0.1.1"
+git push origin v0.1.1
+```
+
+The Release workflow validates the tag, runs the quality gate, builds all three
+targets, publishes the bundles and `SHA256SUMS`, and can safely be rerun for a
+partially failed release.
 
 ## License
 
