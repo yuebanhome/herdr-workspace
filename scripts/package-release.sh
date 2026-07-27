@@ -44,6 +44,8 @@ install -m 0755 "$binary" "$bundle/target/release/herdr-reporadar"
 archive="$output_dir/herdr-reporadar-v${version}-${target}.tar.gz"
 tar -C "$staging" -czf "$archive" herdr-reporadar
 
-tar -tzf "$archive" | grep -qx 'herdr-reporadar/herdr-plugin.toml'
-tar -tzf "$archive" | grep -qx 'herdr-reporadar/target/release/herdr-reporadar'
+archive_contents="$staging/archive-contents.txt"
+tar -tzf "$archive" > "$archive_contents"
+grep -Fxq 'herdr-reporadar/herdr-plugin.toml' "$archive_contents"
+grep -Fxq 'herdr-reporadar/target/release/herdr-reporadar' "$archive_contents"
 printf '%s\n' "$archive"
