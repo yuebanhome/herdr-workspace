@@ -14,7 +14,8 @@ manage commits.
 ## User Experience
 
 The plugin opens as a narrow split on the right of the active Herdr pane. Its
-header shows the current workspace path and repository/change totals.
+header shows the current workspace path and its footer shows repository/change
+totals.
 
 Repositories are listed alphabetically so their positions remain stable across
 refreshes. Each repository row contains:
@@ -27,6 +28,8 @@ refreshes. Each repository row contains:
 
 Activating a dirty repository expands it in place and displays changed files
 with concise Git status markers such as `M`, `A`, `D`, `R`, `U`, and `?`.
+File labels use the shortest repository-unique path suffix; long labels preserve
+both distinguishing context and the filename with a middle ellipsis.
 Activating it again collapses the file list. Clean repositories remain visible
 but cannot expand into an empty section.
 
@@ -96,7 +99,7 @@ is retained with an error indicator and a short status-unavailable message.
 Directory traversal errors produce a visible partial-scan warning instead of
 silently hiding repositories. The previous successful snapshot remains visible
 until a complete new snapshot arrives. An invalid or unavailable workspace root
-produces a centered error message while keeping refresh and quit controls usable.
+produces a visible error message while keeping refresh and quit controls usable.
 
 Git stderr is bounded before display, paths are rendered lossily when they are
 not valid UTF-8, and terminal control characters are sanitized before drawing.
@@ -111,18 +114,19 @@ idempotent `open` action are included. Local development uses
 
 ## Testing And Acceptance
 
-Unit tests cover nested repository discovery, discovery warnings, normal and
+Unit tests cover nested repository discovery, visible discovery warnings, normal and
 unusual porcelain records, Git timeout behavior, status aggregation, stable
 ordering, duplicate-name disambiguation, workspace-root precedence, selection
 preservation, and viewport behavior. Renderer tests use Ratatui's test backend
-at narrow and tall sizes. Integration tests create temporary Git repositories
+at a narrow pane size. Integration tests create temporary Git repositories
 and verify staged, unstaged, nested untracked, deleted, and renamed files through
 the real Git executable.
 
 The delivery is accepted when:
 
-- `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and
-  `cargo test --all-targets` pass;
+- `cargo fmt --all -- --check`,
+  `cargo clippy --all-targets --locked -- -D warnings`, and
+  `cargo test --all-targets --locked` pass;
 - the plugin links successfully in Herdr 0.7.5;
 - invoking the action opens one right-side RepoRadar pane;
 - a multi-repository fixture shows clean repositories muted and dirty

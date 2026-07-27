@@ -4,7 +4,13 @@ use std::path::{Path, PathBuf};
 
 use ignore::WalkBuilder;
 
-pub fn discover_repositories(root: &Path) -> io::Result<Vec<PathBuf>> {
+#[derive(Debug, Eq, PartialEq)]
+pub struct Discovery {
+    pub repositories: Vec<PathBuf>,
+    pub skipped_paths: usize,
+}
+
+pub fn discover_repositories(root: &Path) -> io::Result<Discovery> {
     if !root.is_dir() {
         return Err(io::Error::new(
             io::ErrorKind::NotFound,
@@ -23,10 +29,20 @@ pub fn discover_repositories(root: &Path) -> io::Result<Vec<PathBuf>> {
         });
 
     let mut repositories = Vec::new();
-    for entry in builder.build().filter_map(Result::ok) {
-        let path = entry.path();
-        if entry.file_type().is_some_and(|kind| kind.is_dir()) && path.join(".git").exists() {
-            repositories.push(path.to_path_buf());
+    let mut skipped_paths = 0;
+    for entry in builder.build() {
+        match entry {
+            Ok(entry) => {
+                let path = entry.path();
+                if entry.file_type().is_some_and(|kind| kind.is_dir()) {
+                    match path.join(".git").try_exists() {
+                        Ok(true) => repositories.push(path.to_path_buf()),
+                        Ok(false) => {}
+                        Err(_) => skipped_paths += 1,
+                    }
+                }
+            }
+            Err(_) => skipped_paths += 1,
         }
     }
 
@@ -37,7 +53,10 @@ pub fn discover_repositories(root: &Path) -> io::Result<Vec<PathBuf>> {
             .then_with(|| left.cmp(right))
     });
     repositories.dedup();
-    Ok(repositories)
+    Ok(Discovery {
+        repositories,
+        skipped_paths,
+    })
 }
 
 fn should_descend(path: &Path, name: &OsStr) -> bool {
@@ -60,7 +79,7 @@ fn should_descend(path: &Path, name: &OsStr) -> bool {
     let generated = GENERATED
         .iter()
         .any(|candidate| name == OsStr::new(candidate));
-    !generated || path.join(".git").exists()
+    !generated || path.join(".git").try_exists().unwrap_or(true)
 }
 
 #[cfg(test)]
@@ -78,11 +97,16 @@ mod tests {
         fs::create_dir_all(temp.path().join("group/repo/.git")).unwrap();
         fs::create_dir_all(temp.path().join("group/repo/.git/fake/.git")).unwrap();
 
-        let repos = discover_repositories(temp.path()).unwrap();
+        let discovery = discover_repositories(temp.path()).unwrap();
 
-        assert_eq!(repos.len(), 2);
-        assert!(repos.contains(&temp.path().to_path_buf()));
-        assert!(repos.contains(&temp.path().join("group/repo")));
+        assert_eq!(discovery.repositories.len(), 2);
+        assert!(discovery.repositories.contains(&temp.path().to_path_buf()));
+        assert!(
+            discovery
+                .repositories
+                .contains(&temp.path().join("group/repo"))
+        );
+        assert_eq!(discovery.skipped_paths, 0);
     }
 
     #[test]
@@ -92,7 +116,7 @@ mod tests {
         fs::write(temp.path().join("worktree/.git"), "gitdir: elsewhere").unwrap();
 
         assert_eq!(
-            discover_repositories(temp.path()).unwrap(),
+            discover_repositories(temp.path()).unwrap().repositories,
             vec![temp.path().join("worktree")]
         );
     }
@@ -104,9 +128,13 @@ mod tests {
         fs::write(temp.path().join(".gitignore"), "repos/\n").unwrap();
         fs::create_dir_all(temp.path().join("repos/child/.git")).unwrap();
 
-        let repos = discover_repositories(temp.path()).unwrap();
+        let discovery = discover_repositories(temp.path()).unwrap();
 
-        assert!(repos.contains(&temp.path().join("repos/child")));
+        assert!(
+            discovery
+                .repositories
+                .contains(&temp.path().join("repos/child"))
+        );
     }
 
     #[test]
@@ -116,8 +144,18 @@ mod tests {
         fs::create_dir_all(temp.path().join("target/.git")).unwrap();
 
         assert_eq!(
-            discover_repositories(temp.path()).unwrap(),
+            discover_repositories(temp.path()).unwrap().repositories,
             vec![temp.path().join("target")]
+        );
+    }
+
+    #[test]
+    fn rejects_a_missing_workspace_root() {
+        let temp = tempdir().unwrap();
+        let missing = temp.path().join("missing");
+        assert_eq!(
+            discover_repositories(&missing).unwrap_err().kind(),
+            io::ErrorKind::NotFound
         );
     }
 }

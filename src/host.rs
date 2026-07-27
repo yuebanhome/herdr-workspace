@@ -40,6 +40,32 @@ pub fn extract_pane_cwd_from_reader(mut reader: impl Read) -> Result<PathBuf> {
     bail!("pane JSON contains no working directory")
 }
 
+pub fn extract_workspace_root_from_reader(mut reader: impl Read) -> Result<PathBuf> {
+    let mut input = String::new();
+    reader.read_to_string(&mut input)?;
+    let value: Value = serde_json::from_str(&input).context("invalid plugin context JSON")?;
+    context_path(&value).context("plugin context contains no workspace directory")
+}
+
+pub fn extract_context_pane_id_from_reader(mut reader: impl Read) -> Result<String> {
+    let mut input = String::new();
+    reader.read_to_string(&mut input)?;
+    let value: Value = serde_json::from_str(&input).context("invalid plugin context JSON")?;
+    const POINTERS: &[&str] = &[
+        "/focused_pane_id",
+        "/context/focused_pane_id",
+        "/result/context/focused_pane_id",
+        "/focused_pane/pane_id",
+        "/pane_id",
+    ];
+    POINTERS
+        .iter()
+        .filter_map(|pointer| value.pointer(pointer).and_then(Value::as_str))
+        .find(|pane| !pane.is_empty())
+        .map(ToOwned::to_owned)
+        .context("plugin context contains no focused pane id")
+}
+
 pub fn extract_opened_pane_id_from_reader(mut reader: impl Read) -> Result<String> {
     let mut input = String::new();
     reader.read_to_string(&mut input)?;
@@ -79,14 +105,17 @@ pub fn find_plugin_pane_from_reader(mut reader: impl Read) -> Result<Option<Stri
 
 fn context_path(value: &Value) -> Option<PathBuf> {
     const POINTERS: &[&str] = &[
+        "/workspace_cwd",
+        "/context/workspace_cwd",
+        "/result/context/workspace_cwd",
+        "/workspace/root",
+        "/workspace/cwd",
         "/worktree/path",
         "/worktree/root",
         "/focused_pane/foreground_cwd",
         "/focused_pane/cwd",
         "/pane/foreground_cwd",
         "/pane/cwd",
-        "/workspace/root",
-        "/workspace/cwd",
         "/foreground_cwd",
         "/cwd",
     ];
@@ -127,9 +156,22 @@ pub fn display_root(root: &Path) -> String {
     if let Some(home) = home
         && let Ok(relative) = root.strip_prefix(home)
     {
-        return format!("~/{}", relative.display());
+        return sanitize_display(&format!("~/{}", relative.display()));
     }
-    root.display().to_string()
+    sanitize_display(&root.display().to_string())
+}
+
+fn sanitize_display(value: &str) -> String {
+    value
+        .chars()
+        .map(|character| {
+            if character.is_control() {
+                '?'
+            } else {
+                character
+            }
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -145,6 +187,43 @@ mod tests {
             extract_pane_cwd_from_reader(Cursor::new(json)).unwrap(),
             PathBuf::from("/workspace")
         );
+    }
+
+    #[test]
+    fn workspace_directory_wins_over_focused_pane_directory() {
+        let json = r#"{
+            "workspace_cwd":"/workspace",
+            "focused_pane":{"foreground_cwd":"/workspace/repo-a"}
+        }"#;
+        assert_eq!(
+            extract_workspace_root_from_reader(Cursor::new(json)).unwrap(),
+            PathBuf::from("/workspace")
+        );
+    }
+
+    #[test]
+    fn finds_workspace_directory_in_action_response_shape() {
+        let json = r#"{"result":{"context":{"workspace_cwd":"/workspace"}}}"#;
+        assert_eq!(
+            extract_workspace_root_from_reader(Cursor::new(json)).unwrap(),
+            PathBuf::from("/workspace")
+        );
+    }
+
+    #[test]
+    fn extracts_focused_pane_from_action_context() {
+        let json = r#"{"workspace_id":"w5","focused_pane_id":"w5:p1"}"#;
+        assert_eq!(
+            extract_context_pane_id_from_reader(Cursor::new(json)).unwrap(),
+            "w5:p1"
+        );
+    }
+
+    #[test]
+    fn display_root_sanitizes_terminal_control_characters() {
+        let rendered = display_root(Path::new("/workspace/evil\u{1b}[2Jrepo"));
+        assert!(!rendered.contains('\u{1b}'));
+        assert!(rendered.contains("evil?[2Jrepo"));
     }
 
     #[test]

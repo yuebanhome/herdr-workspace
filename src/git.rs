@@ -1,9 +1,19 @@
+use std::ffi::OsStr;
+use std::io::Read;
 use std::path::Path;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::Duration;
+
+#[cfg(unix)]
+use std::os::unix::process::CommandExt;
 
 use anyhow::{Context, Result, bail};
+use wait_timeout::ChildExt;
 
 use crate::model::{FileChange, Repository};
+
+const GIT_STATUS_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub fn read_repository(root: &Path) -> Repository {
     match run_status(root) {
@@ -25,8 +35,22 @@ pub fn read_repository(root: &Path) -> Repository {
 }
 
 fn run_status(root: &Path) -> Result<(String, Vec<FileChange>)> {
-    let output = Command::new("git")
+    run_status_with(root, OsStr::new("git"), GIT_STATUS_TIMEOUT)
+}
+
+fn run_status_with(
+    root: &Path,
+    git: &OsStr,
+    timeout: Duration,
+) -> Result<(String, Vec<FileChange>)> {
+    let mut command = Command::new(git);
+    command
         .env("GIT_OPTIONAL_LOCKS", "0")
+        .env_remove("GIT_COMMON_DIR")
+        .env_remove("GIT_DIR")
+        .env_remove("GIT_INDEX_FILE")
+        .env_remove("GIT_OBJECT_DIRECTORY")
+        .env_remove("GIT_WORK_TREE")
         .args([
             "-c",
             "core.fsmonitor=false",
@@ -40,18 +64,81 @@ fn run_status(root: &Path) -> Result<(String, Vec<FileChange>)> {
             "--porcelain=v1",
             "-z",
             "--branch",
-            "--untracked-files=normal",
+            "--untracked-files=all",
             "--ignore-submodules=none",
         ])
-        .output()
-        .with_context(|| format!("could not run git in {}", root.display()))?;
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    #[cfg(unix)]
+    command.process_group(0);
 
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
+    let mut child = command
+        .spawn()
+        .with_context(|| format!("could not run git in {}", root.display()))?;
+    let stdout = child
+        .stdout
+        .take()
+        .context("could not capture git stdout")?;
+    let stderr = child
+        .stderr
+        .take()
+        .context("could not capture git stderr")?;
+    let stdout_reader = thread::spawn(move || read_all(stdout));
+    let stderr_reader = thread::spawn(move || read_all(stderr));
+
+    let status = match child.wait_timeout(timeout) {
+        Ok(Some(status)) => status,
+        Ok(None) => {
+            terminate(&mut child);
+            let _ = join_reader(stdout_reader, "stdout");
+            let _ = join_reader(stderr_reader, "stderr");
+            bail!(
+                "git status timed out after {} seconds",
+                timeout.as_secs_f32()
+            );
+        }
+        Err(error) => {
+            terminate(&mut child);
+            let _ = join_reader(stdout_reader, "stdout");
+            let _ = join_reader(stderr_reader, "stderr");
+            return Err(error).context("could not wait for git status");
+        }
+    };
+    let stdout = join_reader(stdout_reader, "stdout")?;
+    let stderr = join_reader(stderr_reader, "stderr")?;
+
+    if !status.success() {
+        let stderr = String::from_utf8_lossy(&stderr);
         bail!("git status failed: {}", stderr.trim());
     }
 
-    parse_porcelain(&output.stdout)
+    parse_porcelain(&stdout)
+}
+
+fn terminate(child: &mut std::process::Child) {
+    #[cfg(unix)]
+    // SAFETY: the child was placed in a new process group whose id is its pid.
+    unsafe {
+        libc::killpg(child.id() as libc::pid_t, libc::SIGKILL);
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+fn read_all(mut reader: impl Read) -> std::io::Result<Vec<u8>> {
+    let mut output = Vec::new();
+    reader.read_to_end(&mut output)?;
+    Ok(output)
+}
+
+fn join_reader(
+    reader: thread::JoinHandle<std::io::Result<Vec<u8>>>,
+    stream: &str,
+) -> Result<Vec<u8>> {
+    reader
+        .join()
+        .map_err(|_| anyhow::anyhow!("git {stream} reader panicked"))?
+        .with_context(|| format!("could not read git {stream}"))
 }
 
 pub fn parse_porcelain(output: &[u8]) -> Result<(String, Vec<FileChange>)> {
@@ -153,6 +240,16 @@ fn bound_message(value: &str, limit: usize) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(unix)]
+    use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+    #[cfg(unix)]
+    use std::time::Instant;
+
+    #[cfg(unix)]
+    use tempfile::tempdir;
+
     use super::*;
 
     #[test]
@@ -183,5 +280,27 @@ mod tests {
         let input = b"## main\0UU src/conflict.rs\0";
         let (_, files) = parse_porcelain(input).unwrap();
         assert_eq!(files[0].marker(), 'U');
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn terminates_a_git_process_that_exceeds_the_timeout() {
+        let temp = tempdir().unwrap();
+        let fake_git = temp.path().join("git");
+        fs::write(&fake_git, "#!/bin/sh\nsleep 5 &\nwait\n").unwrap();
+        let mut permissions = fs::metadata(&fake_git).unwrap().permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&fake_git, permissions).unwrap();
+        let started = Instant::now();
+
+        let error = run_status_with(
+            temp.path(),
+            fake_git.as_os_str(),
+            Duration::from_millis(100),
+        )
+        .unwrap_err();
+
+        assert!(error.to_string().contains("timed out"));
+        assert!(started.elapsed() < Duration::from_secs(2));
     }
 }

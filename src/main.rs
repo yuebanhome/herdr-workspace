@@ -23,6 +23,20 @@ fn try_main() -> Result<()> {
             );
             Ok(())
         }
+        Some("--extract-workspace-root") => {
+            println!(
+                "{}",
+                host::extract_workspace_root_from_reader(host::stdin())?.display()
+            );
+            Ok(())
+        }
+        Some("--extract-context-pane") => {
+            println!(
+                "{}",
+                host::extract_context_pane_id_from_reader(host::stdin())?
+            );
+            Ok(())
+        }
         Some("--extract-opened-pane") => {
             println!(
                 "{}",

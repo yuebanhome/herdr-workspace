@@ -20,6 +20,7 @@ pub struct AppState {
     pub scanning: bool,
     pub scan_queued: bool,
     pub error: Option<String>,
+    pub skipped_paths: usize,
     pub hit_rows: Vec<(u16, usize, bool)>,
     pub body_height: usize,
 }
@@ -35,6 +36,7 @@ impl AppState {
             scanning: false,
             scan_queued: false,
             error: None,
+            skipped_paths: 0,
             hit_rows: Vec::new(),
             body_height: 0,
         }

@@ -1,6 +1,6 @@
 id = "herdr-reporadar"
 name = "RepoRadar"
-version = "0.1.0"
+version = "0.1.1"
 min_herdr_version = "0.7.0"
 description = "A right-side change radar for multi-repository Herdr workspaces."
 platforms = ["linux", "macos"]

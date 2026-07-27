@@ -41,7 +41,9 @@ fn scans_real_repositories_and_reports_file_level_changes() {
 
     fs::write(dirty.join("modified.txt"), "after\n").unwrap();
     fs::remove_file(dirty.join("deleted.txt")).unwrap();
-    fs::write(dirty.join("untracked.txt"), "new\n").unwrap();
+    fs::create_dir_all(dirty.join("untracked/nested")).unwrap();
+    fs::write(dirty.join("untracked/one.txt"), "new\n").unwrap();
+    fs::write(dirty.join("untracked/nested/two.txt"), "new\n").unwrap();
     git(&dirty, &["mv", "renamed.txt", "moved.txt"]);
 
     let repositories = scan_workspace(temp.path()).unwrap();
@@ -56,7 +58,7 @@ fn scans_real_repositories_and_reports_file_level_changes() {
         .iter()
         .find(|repo| repo.name == "dirty")
         .unwrap();
-    assert_eq!(dirty.files.len(), 4);
+    assert_eq!(dirty.files.len(), 5);
     assert_eq!(
         dirty
             .files
@@ -67,7 +69,8 @@ fn scans_real_repositories_and_reports_file_level_changes() {
             ("deleted.txt", 'D'),
             ("modified.txt", 'M'),
             ("moved.txt", 'R'),
-            ("untracked.txt", '?'),
+            ("untracked/nested/two.txt", '?'),
+            ("untracked/one.txt", '?'),
         ]
     );
 }
