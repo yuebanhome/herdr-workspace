@@ -52,10 +52,13 @@ avoids libgit2 behavior drift and naturally supports normal repositories,
 worktrees, submodules, and repository-specific Git configuration. No
 repository-controlled hooks or commands are executed.
 
-The pane derives its root from `HERDR_PLUGIN_CONTEXT_JSON`, falling back to the
-current directory for direct execution and tests. A small launcher action opens
-the pane to the right without stealing focus. Repeated invocation focuses the
-existing RepoRadar pane instead of creating duplicates in the same workspace.
+The pane derives its root from the action context's `workspace_cwd`, not the
+focused pane's foreground directory. This keeps the radar anchored to the whole
+workspace when an agent changes directory inside one repository. It falls back
+to the pane directory and then the current directory only when Herdr does not
+provide workspace context. A small launcher action opens the pane to the right
+without stealing focus. Repeated invocation focuses the existing RepoRadar pane
+instead of creating duplicates in the same workspace.
 
 ## Discovery And Status Flow
 
@@ -67,24 +70,33 @@ repositories from the workspace radar. The workspace root itself is included
 when it is a repository, and nested repositories remain independent entries.
 
 For each discovered repository, a bounded worker pool executes a read-only
-porcelain status command. The result contains the branch, changed file paths,
-and index/worktree status. The dirty count includes staged, unstaged,
+porcelain status command with a ten-second process timeout. The result contains
+the branch, changed file paths, and index/worktree status. Untracked directories
+are expanded to individual files. The dirty count includes staged, unstaged,
 untracked, conflicted, and renamed files. Commits ahead of an upstream do not
-make an otherwise clean repository dirty.
+make an otherwise clean repository dirty. A timed-out repository remains in the
+list with a status-unavailable error while other repositories finish normally.
 
-An initial scan begins immediately. The UI remains responsive while scans run,
-then replaces the repository snapshot atomically. Automatic refresh runs every
-two seconds, and `r` requests an immediate scan. Only one scan may run at a
-time; repeated triggers coalesce. Selection and expanded repositories survive
-refreshes by repository path.
+An initial discovery begins immediately. The UI remains responsive while scans
+run, then replaces the repository snapshot atomically. Normal refreshes reuse
+the known repository paths; full recursive discovery runs on startup, on manual
+refresh or focus, and every thirty seconds. The status interval is adaptive:
+two seconds through 25 repositories, five seconds through 100, and ten seconds
+above 100. Timer ticks never queue a second scan behind a slow one, while manual
+requests coalesce into one pending full discovery. Selection and expanded
+repositories survive refreshes by repository path.
+
+Repository leaf names remain compact when unique. Duplicate leaf names are
+replaced by their workspace-relative paths so every row stays identifiable.
 
 ## Error Handling
 
 A failed repository status command does not abort the workspace scan. The row
 is retained with an error indicator and a short status-unavailable message.
-The previous successful snapshot remains visible until a complete new snapshot
-arrives. An invalid or unavailable workspace root produces a centered error
-message while keeping refresh and quit controls usable.
+Directory traversal errors produce a visible partial-scan warning instead of
+silently hiding repositories. The previous successful snapshot remains visible
+until a complete new snapshot arrives. An invalid or unavailable workspace root
+produces a centered error message while keeping refresh and quit controls usable.
 
 Git stderr is bounded before display, paths are rendered lossily when they are
 not valid UTF-8, and terminal control characters are sanitized before drawing.
@@ -99,11 +111,13 @@ idempotent `open` action are included. Local development uses
 
 ## Testing And Acceptance
 
-Unit tests cover nested repository discovery, normal and unusual porcelain
-records, status aggregation, stable ordering, selection preservation, and
-viewport behavior. Renderer tests use Ratatui's test backend at narrow and tall
-sizes. Integration tests create temporary Git repositories and verify staged,
-unstaged, untracked, deleted, and renamed files through the real Git executable.
+Unit tests cover nested repository discovery, discovery warnings, normal and
+unusual porcelain records, Git timeout behavior, status aggregation, stable
+ordering, duplicate-name disambiguation, workspace-root precedence, selection
+preservation, and viewport behavior. Renderer tests use Ratatui's test backend
+at narrow and tall sizes. Integration tests create temporary Git repositories
+and verify staged, unstaged, nested untracked, deleted, and renamed files through
+the real Git executable.
 
 The delivery is accepted when:
 
